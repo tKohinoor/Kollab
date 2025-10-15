@@ -247,3 +247,270 @@ function loadProjects() {
     })
     .join("");
 }
+function openProjectModal(project) {
+  currentProject = project;
+  document.getElementById("modalProjectTitle").textContent = project.title;
+  document.getElementById("modalProjectDescription").textContent =
+    project.description;
+
+  const projectTasks = tasks.filter((t) => t.projectId === project.id);
+  const taskList = document.getElementById("modalTaskList");
+
+  if (projectTasks.length === 0) {
+    taskList.innerHTML =
+      '<p style="text-align: center; color: #666;">No tasks yet. Add your first task!</p>';
+  } else {
+    taskList.innerHTML = projectTasks
+      .map((task) => {
+        const assignee = users.find((u) => u.id === task.assigneeId);
+        const deadlineDate = new Date(task.deadline);
+        const isOverdue =
+          deadlineDate < new Date() && task.status !== "completed";
+
+        return `
+                        <div class="task-item ${isOverdue ? "overdue" : ""}">
+                            <div class="task-header">
+                                <div class="task-title">${task.title}</div>
+                                <div class="task-status status-${
+                                  task.status
+                                }" onclick="cycleTaskStatus(${task.id})">
+                                    ${
+                                      task.status.charAt(0).toUpperCase() +
+                                      task.status.slice(1)
+                                    }
+                                </div>
+                            </div>
+                            <div class="task-details">
+                                <span>Assigned to: ${
+                                  assignee ? assignee.name : "Unknown"
+                                }</span>
+                                <span>Due: ${deadlineDate.toLocaleDateString()} ${
+          isOverdue ? "(Overdue!)" : ""
+        }</span>
+                            </div>
+                        </div>
+                    `;
+      })
+      .join("");
+  }
+
+  document.getElementById("projectModal").style.display = "block";
+}
+
+function populateAssigneeDropdown() {
+  const dropdown = document.getElementById("taskAssignee");
+  dropdown.innerHTML = '<option value="">Select team member</option>';
+
+  users.forEach((user) => {
+    dropdown.innerHTML += <option value="${user.id}">${user.name}</option>;
+  });
+}
+
+function cycleTaskStatus(taskId) {
+  const task = tasks.find((t) => t.id === taskId);
+  const statuses = ["pending", "progress", "completed"];
+  const currentIndex = statuses.indexOf(task.status);
+  const nextIndex = (currentIndex + 1) % statuses.length;
+
+  task.status = statuses[nextIndex];
+  localStorage.setItem("kollabTasks", JSON.stringify(tasks));
+
+  openProjectModal(currentProject);
+  loadProjects();
+  loadMyTasks();
+
+  showNotification(Task status updated to ${task.status}!, "success");
+}
+
+function loadMyTasks() {
+  const myTasks = tasks.filter((t) => t.assigneeId === currentUser.id);
+  const tasksList = document.getElementById("myTasksList");
+
+  if (myTasks.length === 0) {
+    tasksList.innerHTML =
+      '<p style="text-align: center; color: #666;">No tasks assigned to you yet.</p>';
+    return;
+  }
+
+  tasksList.innerHTML = myTasks
+    .map((task) => {
+      const project = projects.find((p) => p.id === task.projectId);
+      const deadlineDate = new Date(task.deadline);
+      const isOverdue =
+        deadlineDate < new Date() && task.status !== "completed";
+
+      return `
+                    <div class="task-item ${isOverdue ? "overdue" : ""}">
+                        <div class="task-header">
+                            <div class="task-title">${task.title}</div>
+                            <div class="task-status status-${
+                              task.status
+                            }" onclick="cycleTaskStatus(${task.id})">
+                                ${
+                                  task.status.charAt(0).toUpperCase() +
+                                  task.status.slice(1)
+                                }
+                            </div>
+                        </div>
+                        <div class="task-details">
+                            <span>Project: ${
+                              project ? project.title : "Unknown Project"
+                            }</span>
+                            <span>Due: ${deadlineDate.toLocaleDateString()} ${
+        isOverdue ? "(Overdue!)" : ""
+      }</span>
+                        </div>
+                    </div>
+                `;
+    })
+    .join("");
+}
+
+function loadNotifications() {
+  const userNotifications = notifications.filter(
+    (n) => n.userId === currentUser.id
+  );
+  const notificationsList = document.getElementById("notificationsList");
+
+  if (userNotifications.length === 0) {
+    notificationsList.innerHTML =
+      '<p style="text-align: center; color: #666;">No notifications yet.</p>';
+    return;
+  }
+
+  notificationsList.innerHTML = userNotifications
+    .map((notification) => {
+      const notificationDate = new Date(notification.createdAt);
+      return `
+                    <div class="task-item ${
+                      notification.read ? "" : "unread"
+                    }" onclick="markNotificationRead(${notification.id})">
+                        <div class="task-header">
+                            <div class="task-title">${
+                              notification.message
+                            }</div>
+                            <div style="font-size: 12px; color: #666;">
+                                ${notificationDate.toLocaleDateString()} ${notificationDate.toLocaleTimeString()}
+                            </div>
+                        </div>
+                    </div>
+                `;
+    })
+    .reverse()
+    .join("");
+}
+
+function markNotificationRead(notificationId) {
+  const notification = notifications.find((n) => n.id === notificationId);
+  if (notification) {
+    notification.read = true;
+    localStorage.setItem("kollabNotifications", JSON.stringify(notifications));
+    loadNotifications();
+  }
+}
+
+function showNotification(message, type = "info") {
+  const notification = document.getElementById("notification");
+  notification.textContent = message;
+  notification.className = notification ${type};
+  notification.classList.add("show");
+
+  setTimeout(() => {
+    notification.classList.remove("show");
+  }, 3000);
+}
+
+function checkDeadlines() {
+  if (!currentUser) return;
+
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  const myTasks = tasks.filter(
+    (t) => t.assigneeId === currentUser.id && t.status !== "completed"
+  );
+
+  myTasks.forEach((task) => {
+    const deadline = new Date(task.deadline);
+    const project = projects.find((p) => p.id === task.projectId);
+
+    if (deadline.toDateString() === tomorrow.toDateString()) {
+      const notification = {
+        id: Date.now() + Math.random(),
+        userId: currentUser.id,
+        message: `Task "${task.title}" in project "${
+          project ? project.title : "Unknown"
+        }" is due tomorrow!`,
+        type: "deadline_reminder",
+        read: false,
+        createdAt: new Date().toISOString(),
+      };
+      notifications.push(notification);
+      localStorage.setItem(
+        "kollabNotifications",
+        JSON.stringify(notifications)
+      );
+    }
+
+    if (deadline < today) {
+      const notification = {
+        id: Date.now() + Math.random(),
+        userId: currentUser.id,
+        message: `Task "${task.title}" in project "${
+          project ? project.title : "Unknown"
+        }" is overdue!`,
+        type: "overdue",
+        read: false,
+        createdAt: new Date().toISOString(),
+      };
+      notifications.push(notification);
+      localStorage.setItem(
+        "kollabNotifications",
+        JSON.stringify(notifications)
+      );
+    }
+  });
+
+  // Check again in 1 hour
+  setTimeout(checkDeadlines, 3600000);
+}
+
+// Close modals when clicking outside
+window.onclick = function (event) {
+  const modals = document.querySelectorAll(".modal");
+  modals.forEach((modal) => {
+    if (event.target === modal) {
+      modal.style.display = "none";
+    }
+  });
+};
+
+// Add some demo data for testing
+if (users.length === 0) {
+  const demoUsers = [
+    {
+      id: 1,
+      name: "John Doe",
+      email: "john@example.com",
+      password: "password",
+    },
+    {
+      id: 2,
+      name: "Jane Smith",
+      email: "jane@example.com",
+      password: "password",
+    },
+    {
+      id: 3,
+      name: "Bob Johnson",
+      email: "bob@example.com",
+      password: "password",
+    },
+  ];
+  users.push(...demoUsers);
+  localStorage.setItem("kollabUsers", JSON.stringify(users));
+}
+
+// const x = setTimeout(()=>{console.log(Working Fine)}, 1000);
+// console.log (x);
