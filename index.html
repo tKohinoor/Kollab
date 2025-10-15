@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kollab - Team Collaboration</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Kollab</h1>
+        <p>Team Collaboration Made Simple</p>
+        <div class="user-info">
+          <span id="currentUser"></span>
+          <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+      </div>
+
+      <!-- Authentication Section -->
+      <div id="authSection" class="auth-section">
+        <div class="auth-toggle">
+          <button id="loginTab" class="active" onclick="switchAuthTab('login')">
+            Login
+          </button>
+          <button id="registerTab" onclick="switchAuthTab('register')">
+            Register
+          </button>
+        </div>
+
+        <form id="loginForm">
+          <div class="form-group">
+            <label for="loginEmail">Email</label>
+            <input type="email" id="loginEmail" required />
+          </div>
+          <div class="form-group">
+            <label for="loginPassword">Password</label>
+            <input type="password" id="loginPassword" required />
+          </div>
+          <button type="submit" class="btn-primary">Login</button>
+        </form>
+
+        <form id="registerForm" style="display: none">
+          <div class="form-group">
+            <label for="registerName">Full Name</label>
+            <input type="text" id="registerName" required />
+          </div>
+          <div class="form-group">
+            <label for="registerEmail">Email</label>
+            <input type="email" id="registerEmail" required />
+          </div>
+          <div class="form-group">
+            <label for="registerPassword">Password</label>
+            <input type="password" id="registerPassword" required />
+          </div>
+          <button type="submit" class="btn-primary">Register</button>
+        </form>
+      </div>
+
+      <!-- Dashboard Section -->
+      <div id="dashboard" class="dashboard">
+        <div class="dashboard-nav">
+          <button class="nav-btn active" onclick="switchSection('projects')">
+            Projects
+          </button>
+          <button class="nav-btn" onclick="switchSection('tasks')">
+            My Tasks
+          </button>
+          <button class="nav-btn" onclick="switchSection('notifications')">
+            Notifications
+          </button>
+        </div>
+
+        <div id="projectsSection" class="section active">
+          <div
+            style="
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 20px;
+            "
+          >
+            <h2>My Projects</h2>
+            <button
+              class="btn-primary"
+              onclick="openCreateProjectModal()"
+              style="width: auto; padding: 12px 24px"
+            >
+              Create Project
+            </button>
+          </div>
+          <div id="projectGrid" class="project-grid"></div>
+        </div>
+
+        <div id="tasksSection" class="section">
+          <h2>My Tasks</h2>
+          <div id="myTasksList" class="task-list"></div>
+        </div>
+
+        <div id="notificationsSection" class="section">
+          <h2>Notifications</h2>
+          <div id="notificationsList"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Create Project Modal -->
+    <div id="createProjectModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 class="modal-title">Create New Project</h3>
+          <button class="close-btn" onclick="closeModal('createProjectModal')">
+            &times;
+          </button>
+        </div>
+        <form id="createProjectForm">
+          <div class="form-group">
+            <label for="projectTitle">Project Title</label>
+            <input type="text" id="projectTitle" required />
+          </div>
+          <div class="form-group">
+            <label for="projectDescription">Description</label>
+            <input type="text" id="projectDescription" required />
+          </div>
+          <button type="submit" class="btn-primary">Create Project</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Project Details Modal -->
+    <div id="projectModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 class="modal-title" id="modalProjectTitle"></h3>
+          <button class="close-btn" onclick="closeModal('projectModal')">
+            &times;
+          </button>
+        </div>
+        <p id="modalProjectDescription"></p>
+
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 20px 0;
+          "
+        >
+          <h4>Tasks</h4>
+          <button
+            class="btn-primary"
+            onclick="openCreateTaskModal()"
+            style="width: auto; padding: 10px 20px"
+          >
+            Add Task
+          </button>
+        </div>
+        <div id="modalTaskList" class="task-list"></div>
+      </div>
+    </div>
+
+    <!-- Create Task Modal -->
+    <div id="createTaskModal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 class="modal-title">Create New Task</h3>
+          <button class="close-btn" onclick="closeModal('createTaskModal')">
+            &times;
+          </button>
+        </div>
+        <form id="createTaskForm">
+          <div class="form-group">
+            <label for="taskTitle">Task Title</label>
+            <input type="text" id="taskTitle" required />
+          </div>
+          <div class="form-group">
+            <label for="taskAssignee">Assign To</label>
+            <select id="taskAssignee" required>
+              <option value="">Select team member</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="taskDeadline">Deadline</label>
+            <input type="date" id="taskDeadline" required />
+          </div>
+          <button type="submit" class="btn-primary">Create Task</button>
+        </form>
+      </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <script src="script.js"></script>
+
+    <style>
+      .overdue {
+        border-color: #ff6b6b !important;
+        background: #fff5f5 !important;
+      }
+
+      .unread {
+        background: #e3f2fd !important;
+        border-color: #2196f3 !important;
+      }
+
+      .task-item.unread::before {
+        content: "●";
+        color: #2196f3;
+        font-weight: bold;
+        margin-right: 10px;
+      }
+
+      @keyframes pulse {
+        0% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.05);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      .notification.show {
+        animation: pulse 0.3s ease-in-out;
+      }
+
+      .project-card:hover .project-title {
+        color: #4facfe;
+      }
+
+      .task-status:hover {
+        transform: scale(1.1);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      /* Add loading states */
+      .loading {
+        opacity: 0.6;
+        pointer-events: none;
+      }
+
+      .loading::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 20px;
+        height: 20px;
+        margin: -10px 0 0 -10px;
+        border: 2px solid #f3f3f3;
+        border-top: 2px solid #4facfe;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Enhanced mobile responsiveness */
+      @media (max-width: 480px) {
+        .header h1 {
+          font-size: 1.5rem;
+        }
+
+        .auth-section {
+          padding: 15px;
+        }
+
+        .dashboard {
+          padding: 15px;
+        }
+
+        .modal-content {
+          padding: 15px;
+          margin: 15px;
+          width: calc(100% - 30px);
+        }
+
+        .form-group input,
+        select {
+          padding: 12px;
+          font-size: 14px;
+        }
+
+        .btn-primary {
+          padding: 12px;
+          font-size: 14px;
+        }
+
+        .notification {
+          right: 10px;
+          top: 10px;
+          padding: 10px 15px;
+          font-size: 14px;
+        }
+      }
+
+      /* Dark mode support */
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+        }
+
+        .container {
+          background: rgba(44, 62, 80, 0.95);
+          color: #ecf0f1;
+        }
+
+        .auth-toggle {
+          background: #34495e;
+        }
+
+        .form-group input,
+        select {
+          background: #34495e;
+          border-color: #4a6741;
+          color: #ecf0f1;
+        }
+
+        .form-group input:focus,
+        select:focus {
+          border-color: #4facfe;
+        }
+
+        .project-card,
+        .task-item {
+          background: #34495e;
+          border-color: #4a6741;
+          color: #ecf0f1;
+        }
+
+        .modal-content {
+          background: #2c3e50;
+          color: #ecf0f1;
+        }
+
+        .nav-btn {
+          background: #34495e;
+          color: #ecf0f1;
+        }
+      }
+    </style>
+  </body>
+</html>
