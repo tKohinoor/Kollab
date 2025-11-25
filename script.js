@@ -1,94 +1,137 @@
+// Firebase Configuration
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
+import { 
+  getAuth, 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged 
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
+import { 
+  getDatabase, 
+  ref, 
+  set, 
+  get, 
+  push, 
+  onValue,
+  query,
+  orderByChild,
+  equalTo,
+  update
+} from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyCDoNhMBdEIjYNkCGJgYh5ovp87IJNspmg",
+  authDomain: "kollabjovac.firebaseapp.com",
+  databaseURL: "https://kollabjovac-default-rtdb.firebaseio.com",
+  projectId: "kollabjovac",
+  storageBucket: "kollabjovac.firebasestorage.app",
+  messagingSenderId: "231736706898",
+  appId: "1:231736706898:web:e11d146cec5fc83fa71c8b",
+  measurementId: "G-C2R04KMRG8"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const database = getDatabase(app);
+
 // Global state
 let currentUser = null;
-let users = JSON.parse(localStorage.getItem("kollabUsers")) || [];
-let projects = JSON.parse(localStorage.getItem("kollabProjects")) || [];
-let tasks = JSON.parse(localStorage.getItem("kollabTasks")) || [];
-let notifications =
-  JSON.parse(localStorage.getItem("kollabNotifications")) || [];
 let currentProject = null;
+let projectsListener = null;
+let tasksListener = null;
+let notificationsListener = null;
 
 // Initialize app
 document.addEventListener("DOMContentLoaded", function () {
-  checkAuth();
   setupEventListeners();
-  checkDeadlines();
+  setupAuthListener();
 });
+
+function setupAuthListener() {
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      // User is signed in
+      const userRef = ref(database, `users/${user.uid}`);
+      const snapshot = await get(userRef);
+      
+      if (snapshot.exists()) {
+        currentUser = {
+          uid: user.uid,
+          email: user.email,
+          ...snapshot.val()
+        };
+        showDashboard();
+        checkDeadlines();
+      }
+    } else {
+      // User is signed out
+      currentUser = null;
+      document.getElementById("authSection").style.display = "block";
+      document.getElementById("dashboard").style.display = "none";
+      document.querySelector(".user-info").style.display = "none";
+      
+      // Clean up listeners
+      if (projectsListener) projectsListener();
+      if (tasksListener) tasksListener();
+      if (notificationsListener) notificationsListener();
+    }
+  });
+}
 
 function setupEventListeners() {
   document.getElementById("loginForm").addEventListener("submit", handleLogin);
-  document
-    .getElementById("registerForm")
-    .addEventListener("submit", handleRegister);
-  document
-    .getElementById("createProjectForm")
-    .addEventListener("submit", handleCreateProject);
-  document
-    .getElementById("createTaskForm")
-    .addEventListener("submit", handleCreateTask);
-}
-
-function checkAuth() {
-  const savedUser = localStorage.getItem("kollabCurrentUser");
-  if (savedUser) {
-    currentUser = JSON.parse(savedUser);
-    showDashboard();
-  }
+  document.getElementById("registerForm").addEventListener("submit", handleRegister);
+  document.getElementById("createProjectForm").addEventListener("submit", handleCreateProject);
+  document.getElementById("createTaskForm").addEventListener("submit", handleCreateTask);
 }
 
 function switchAuthTab(tab) {
-  document
-    .getElementById("loginTab")
-    .classList.toggle("active", tab === "login");
-  document
-    .getElementById("registerTab")
-    .classList.toggle("active", tab === "register");
-  document.getElementById("loginForm").style.display =
-    tab === "login" ? "block" : "none";
-  document.getElementById("registerForm").style.display =
-    tab === "register" ? "block" : "none";
+  document.getElementById("loginTab").classList.toggle("active", tab === "login");
+  document.getElementById("registerTab").classList.toggle("active", tab === "register");
+  document.getElementById("loginForm").style.display = tab === "login" ? "block" : "none";
+  document.getElementById("registerForm").style.display = tab === "register" ? "block" : "none";
 }
 
-function handleLogin(e) {
+async function handleLogin(e) {
   e.preventDefault();
   const email = document.getElementById("loginEmail").value;
   const password = document.getElementById("loginPassword").value;
 
-  const user = users.find((u) => u.email === email && u.password === password);
-  if (user) {
-    currentUser = user;
-    localStorage.setItem("kollabCurrentUser", JSON.stringify(currentUser));
-    showDashboard();
-    showNotification("Welcome back, " + user.name + "!", "success");
-  } else {
-    showNotification("Invalid credentials!", "warning");
+  try {
+    await signInWithEmailAndPassword(auth, email, password);
+    showNotification("Welcome back!", "success");
+    document.getElementById("loginForm").reset();
+  } catch (error) {
+    console.error("Login error:", error);
+    showNotification(getErrorMessage(error.code), "warning");
   }
 }
 
-function handleRegister(e) {
+async function handleRegister(e) {
   e.preventDefault();
   const name = document.getElementById("registerName").value;
   const email = document.getElementById("registerEmail").value;
   const password = document.getElementById("registerPassword").value;
 
-  if (users.find((u) => u.email === email)) {
-    showNotification("Email already exists!", "warning");
-    return;
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+
+    // Save user profile to database
+    await set(ref(database, `users/${user.uid}`), {
+      name: name,
+      email: email,
+      createdAt: new Date().toISOString()
+    });
+
+    showNotification("Account created successfully!", "success");
+    document.getElementById("registerForm").reset();
+  } catch (error) {
+    console.error("Registration error:", error);
+    showNotification(getErrorMessage(error.code), "warning");
   }
-
-  const newUser = {
-    id: Date.now(),
-    name,
-    email,
-    password,
-  };
-
-  users.push(newUser);
-  localStorage.setItem("kollabUsers", JSON.stringify(users));
-
-  currentUser = newUser;
-  localStorage.setItem("kollabCurrentUser", JSON.stringify(currentUser));
-  showDashboard();
-  showNotification("Account created successfully!", "success");
 }
 
 function showDashboard() {
@@ -102,26 +145,22 @@ function showDashboard() {
   loadNotifications();
 }
 
-function logout() {
-  currentUser = null;
-  localStorage.removeItem("kollabCurrentUser");
-  document.getElementById("authSection").style.display = "block";
-  document.getElementById("dashboard").style.display = "none";
-  document.querySelector(".user-info").style.display = "none";
-
-  // Reset forms
-  document.getElementById("loginForm").reset();
-  document.getElementById("registerForm").reset();
-  switchAuthTab("login");
+async function logout() {
+  try {
+    await signOut(auth);
+    document.getElementById("loginForm").reset();
+    document.getElementById("registerForm").reset();
+    switchAuthTab("login");
+    showNotification("Logged out successfully", "success");
+  } catch (error) {
+    console.error("Logout error:", error);
+    showNotification("Error logging out", "warning");
+  }
 }
 
 function switchSection(section) {
-  document
-    .querySelectorAll(".nav-btn")
-    .forEach((btn) => btn.classList.remove("active"));
-  document
-    .querySelectorAll(".section")
-    .forEach((sec) => sec.classList.remove("active"));
+  document.querySelectorAll(".nav-btn").forEach((btn) => btn.classList.remove("active"));
+  document.querySelectorAll(".section").forEach((sec) => sec.classList.remove("active"));
 
   event.target.classList.add("active");
   document.getElementById(section + "Section").classList.add("active");
@@ -146,273 +185,329 @@ function closeModal(modalId) {
   }
 }
 
-function handleCreateProject(e) {
+async function handleCreateProject(e) {
   e.preventDefault();
   const title = document.getElementById("projectTitle").value;
   const description = document.getElementById("projectDescription").value;
 
-  const newProject = {
-    id: Date.now(),
-    title,
-    description,
-    ownerId: currentUser.id,
-    createdAt: new Date().toISOString(),
-  };
+  try {
+    const projectsRef = ref(database, 'projects');
+    const newProjectRef = push(projectsRef);
 
-  projects.push(newProject);
-  localStorage.setItem("kollabProjects", JSON.stringify(projects));
+    await set(newProjectRef, {
+      title,
+      description,
+      ownerId: currentUser.uid,
+      ownerName: currentUser.name,
+      createdAt: new Date().toISOString()
+    });
 
-  closeModal("createProjectModal");
-  loadProjects();
-  showNotification("Project created successfully!", "success");
+    closeModal("createProjectModal");
+    showNotification("Project created successfully!", "success");
+  } catch (error) {
+    console.error("Error creating project:", error);
+    showNotification("Error creating project", "warning");
+  }
 }
 
-function handleCreateTask(e) {
+async function handleCreateTask(e) {
   e.preventDefault();
   const title = document.getElementById("taskTitle").value;
-  const assigneeId = parseInt(document.getElementById("taskAssignee").value);
+  const assigneeId = document.getElementById("taskAssignee").value;
   const deadline = document.getElementById("taskDeadline").value;
 
-  const newTask = {
-    id: Date.now(),
-    title,
-    projectId: currentProject.id,
-    assigneeId,
-    deadline,
-    status: "pending",
-    createdAt: new Date().toISOString(),
-  };
+  try {
+    // Get assignee details
+    const assigneeRef = ref(database, `users/${assigneeId}`);
+    const assigneeSnapshot = await get(assigneeRef);
+    const assignee = assigneeSnapshot.val();
 
-  tasks.push(newTask);
-  localStorage.setItem("kollabTasks", JSON.stringify(tasks));
+    // Create task
+    const tasksRef = ref(database, 'tasks');
+    const newTaskRef = push(tasksRef);
 
-  // Create notification for assignee
-  const assignee = users.find((u) => u.id === assigneeId);
-  if (assignee) {
-    const notification = {
-      id: Date.now(),
+    await set(newTaskRef, {
+      title,
+      projectId: currentProject.id,
+      projectTitle: currentProject.title,
+      assigneeId,
+      assigneeName: assignee.name,
+      deadline,
+      status: "pending",
+      createdAt: new Date().toISOString()
+    });
+
+    // Create notification for assignee
+    const notificationsRef = ref(database, 'notifications');
+    const newNotificationRef = push(notificationsRef);
+
+    await set(newNotificationRef, {
       userId: assigneeId,
       message: `You have been assigned a new task: "${title}" in project "${currentProject.title}"`,
       type: "task_assigned",
       read: false,
-      createdAt: new Date().toISOString(),
-    };
-    notifications.push(notification);
-    localStorage.setItem("kollabNotifications", JSON.stringify(notifications));
-  }
+      createdAt: new Date().toISOString()
+    });
 
-  closeModal("createTaskModal");
-  openProjectModal(currentProject);
-  showNotification("Task created and assigned!", "success");
+    closeModal("createTaskModal");
+    showNotification("Task created and assigned!", "success");
+  } catch (error) {
+    console.error("Error creating task:", error);
+    showNotification("Error creating task", "warning");
+  }
 }
 
 function loadProjects() {
-  const userProjects = projects.filter((p) => p.ownerId === currentUser.id);
-  const projectGrid = document.getElementById("projectGrid");
+  const projectsRef = ref(database, 'projects');
+  const userProjectsQuery = query(projectsRef, orderByChild('ownerId'), equalTo(currentUser.uid));
 
-  if (userProjects.length === 0) {
-    projectGrid.innerHTML =
-      '<p style="text-align: center; color: #666; grid-column: 1 / -1;">No projects yet. Create your first project!</p>';
-    return;
-  }
+  // Clean up previous listener
+  if (projectsListener) projectsListener();
 
-  projectGrid.innerHTML = userProjects
-    .map((project) => {
-      const projectTasks = tasks.filter((t) => t.projectId === project.id);
-      const pendingTasks = projectTasks.filter(
-        (t) => t.status === "pending"
-      ).length;
-      const progressTasks = projectTasks.filter(
-        (t) => t.status === "progress"
-      ).length;
-      const completedTasks = projectTasks.filter(
-        (t) => t.status === "completed"
-      ).length;
+  projectsListener = onValue(userProjectsQuery, async (snapshot) => {
+    const projectGrid = document.getElementById("projectGrid");
+    
+    if (!snapshot.exists()) {
+      projectGrid.innerHTML = '<p style="text-align: center; color: #666; grid-column: 1 / -1;">No projects yet. Create your first project!</p>';
+      return;
+    }
+
+    const projects = [];
+    snapshot.forEach((childSnapshot) => {
+      projects.push({
+        id: childSnapshot.key,
+        ...childSnapshot.val()
+      });
+    });
+
+    // Get task counts for each project
+    const projectsHTML = await Promise.all(projects.map(async (project) => {
+      const tasksRef = ref(database, 'tasks');
+      const projectTasksQuery = query(tasksRef, orderByChild('projectId'), equalTo(project.id));
+      const tasksSnapshot = await get(projectTasksQuery);
+
+      let pendingTasks = 0;
+      let progressTasks = 0;
+      let completedTasks = 0;
+
+      if (tasksSnapshot.exists()) {
+        tasksSnapshot.forEach((taskSnapshot) => {
+          const task = taskSnapshot.val();
+          if (task.status === 'pending') pendingTasks++;
+          else if (task.status === 'progress') progressTasks++;
+          else if (task.status === 'completed') completedTasks++;
+        });
+      }
 
       return `
-                    <div class="project-card" onclick="openProjectModal(${JSON.stringify(
-                      project
-                    ).replace(/"/g, "&quot;")})">
-                        <div class="project-title">${project.title}</div>
-                        <div class="project-description">${
-                          project.description
-                        }</div>
-                        <div class="task-stats">
-                            <span class="stat-badge stat-pending">Pending: ${pendingTasks}</span>
-                            <span class="stat-badge stat-progress">In Progress: ${progressTasks}</span>
-                            <span class="stat-badge stat-completed">Completed: ${completedTasks}</span>
-                        </div>
-                    </div>
-                `;
-    })
-    .join("");
+        <div class="project-card" onclick='openProjectModal(${JSON.stringify(project).replace(/'/g, "&#39;")})'>
+          <div class="project-title">${project.title}</div>
+          <div class="project-description">${project.description}</div>
+          <div class="task-stats">
+            <span class="stat-badge stat-pending">Pending: ${pendingTasks}</span>
+            <span class="stat-badge stat-progress">In Progress: ${progressTasks}</span>
+            <span class="stat-badge stat-completed">Completed: ${completedTasks}</span>
+          </div>
+        </div>
+      `;
+    }));
+
+    projectGrid.innerHTML = projectsHTML.join('');
+  });
 }
-function openProjectModal(project) {
+
+async function openProjectModal(project) {
   currentProject = project;
   document.getElementById("modalProjectTitle").textContent = project.title;
-  document.getElementById("modalProjectDescription").textContent =
-    project.description;
+  document.getElementById("modalProjectDescription").textContent = project.description;
 
-  const projectTasks = tasks.filter((t) => t.projectId === project.id);
+  const tasksRef = ref(database, 'tasks');
+  const projectTasksQuery = query(tasksRef, orderByChild('projectId'), equalTo(project.id));
+  
+  const snapshot = await get(projectTasksQuery);
   const taskList = document.getElementById("modalTaskList");
 
-  if (projectTasks.length === 0) {
-    taskList.innerHTML =
-      '<p style="text-align: center; color: #666;">No tasks yet. Add your first task!</p>';
+  if (!snapshot.exists()) {
+    taskList.innerHTML = '<p style="text-align: center; color: #666;">No tasks yet. Add your first task!</p>';
   } else {
-    taskList.innerHTML = projectTasks
-      .map((task) => {
-        const assignee = users.find((u) => u.id === task.assigneeId);
-        const deadlineDate = new Date(task.deadline);
-        const isOverdue =
-          deadlineDate < new Date() && task.status !== "completed";
+    const tasksHTML = [];
+    snapshot.forEach((childSnapshot) => {
+      const task = {
+        id: childSnapshot.key,
+        ...childSnapshot.val()
+      };
 
-        return `
-                        <div class="task-item ${isOverdue ? "overdue" : ""}">
-                            <div class="task-header">
-                                <div class="task-title">${task.title}</div>
-                                <div class="task-status status-${
-                                  task.status
-                                }" onclick="cycleTaskStatus(${task.id})">
-                                    ${
-                                      task.status.charAt(0).toUpperCase() +
-                                      task.status.slice(1)
-                                    }
-                                </div>
-                            </div>
-                            <div class="task-details">
-                                <span>Assigned to: ${
-                                  assignee ? assignee.name : "Unknown"
-                                }</span>
-                                <span>Due: ${deadlineDate.toLocaleDateString()} ${
-          isOverdue ? "(Overdue!)" : ""
-        }</span>
-                            </div>
-                        </div>
-                    `;
-      })
-      .join("");
+      const deadlineDate = new Date(task.deadline);
+      const isOverdue = deadlineDate < new Date() && task.status !== "completed";
+
+      tasksHTML.push(`
+        <div class="task-item ${isOverdue ? "overdue" : ""}">
+          <div class="task-header">
+            <div class="task-title">${task.title}</div>
+            <div class="task-status status-${task.status}" onclick="cycleTaskStatus('${task.id}', '${task.status}')">
+              ${task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+            </div>
+          </div>
+          <div class="task-details">
+            <span>Assigned to: ${task.assigneeName}</span>
+            <span>Due: ${deadlineDate.toLocaleDateString()} ${isOverdue ? "(Overdue!)" : ""}</span>
+          </div>
+        </div>
+      `);
+    });
+
+    taskList.innerHTML = tasksHTML.join('');
   }
 
   document.getElementById("projectModal").style.display = "block";
 }
 
-function populateAssigneeDropdown() {
+async function populateAssigneeDropdown() {
   const dropdown = document.getElementById("taskAssignee");
   dropdown.innerHTML = '<option value="">Select team member</option>';
 
-  users.forEach((user) => {
-    dropdown.innerHTML += <option value="${user.id}">${user.name}</option>;
-  });
+  const usersRef = ref(database, 'users');
+  const snapshot = await get(usersRef);
+
+  if (snapshot.exists()) {
+    snapshot.forEach((childSnapshot) => {
+      const userId = childSnapshot.key;
+      const user = childSnapshot.val();
+      dropdown.innerHTML += `<option value="${userId}">${user.name}</option>`;
+    });
+  }
 }
 
-function cycleTaskStatus(taskId) {
-  const task = tasks.find((t) => t.id === taskId);
+async function cycleTaskStatus(taskId, currentStatus) {
   const statuses = ["pending", "progress", "completed"];
-  const currentIndex = statuses.indexOf(task.status);
+  const currentIndex = statuses.indexOf(currentStatus);
   const nextIndex = (currentIndex + 1) % statuses.length;
+  const newStatus = statuses[nextIndex];
 
-  task.status = statuses[nextIndex];
-  localStorage.setItem("kollabTasks", JSON.stringify(tasks));
+  try {
+    const taskRef = ref(database, `tasks/${taskId}`);
+    await update(taskRef, {
+      status: newStatus
+    });
 
-  openProjectModal(currentProject);
-  loadProjects();
-  loadMyTasks();
-
-  showNotification(Task status updated to ${task.status}!, "success");
+    showNotification(`Task status updated to ${newStatus}!`, "success");
+    
+    // Reload current project modal if open
+    if (currentProject) {
+      openProjectModal(currentProject);
+    }
+  } catch (error) {
+    console.error("Error updating task status:", error);
+    showNotification("Error updating task status", "warning");
+  }
 }
 
 function loadMyTasks() {
-  const myTasks = tasks.filter((t) => t.assigneeId === currentUser.id);
-  const tasksList = document.getElementById("myTasksList");
+  const tasksRef = ref(database, 'tasks');
+  const myTasksQuery = query(tasksRef, orderByChild('assigneeId'), equalTo(currentUser.uid));
 
-  if (myTasks.length === 0) {
-    tasksList.innerHTML =
-      '<p style="text-align: center; color: #666;">No tasks assigned to you yet.</p>';
-    return;
-  }
+  // Clean up previous listener
+  if (tasksListener) tasksListener();
 
-  tasksList.innerHTML = myTasks
-    .map((task) => {
-      const project = projects.find((p) => p.id === task.projectId);
+  tasksListener = onValue(myTasksQuery, (snapshot) => {
+    const tasksList = document.getElementById("myTasksList");
+
+    if (!snapshot.exists()) {
+      tasksList.innerHTML = '<p style="text-align: center; color: #666;">No tasks assigned to you yet.</p>';
+      return;
+    }
+
+    const tasksHTML = [];
+    snapshot.forEach((childSnapshot) => {
+      const task = {
+        id: childSnapshot.key,
+        ...childSnapshot.val()
+      };
+
       const deadlineDate = new Date(task.deadline);
-      const isOverdue =
-        deadlineDate < new Date() && task.status !== "completed";
+      const isOverdue = deadlineDate < new Date() && task.status !== "completed";
 
-      return `
-                    <div class="task-item ${isOverdue ? "overdue" : ""}">
-                        <div class="task-header">
-                            <div class="task-title">${task.title}</div>
-                            <div class="task-status status-${
-                              task.status
-                            }" onclick="cycleTaskStatus(${task.id})">
-                                ${
-                                  task.status.charAt(0).toUpperCase() +
-                                  task.status.slice(1)
-                                }
-                            </div>
-                        </div>
-                        <div class="task-details">
-                            <span>Project: ${
-                              project ? project.title : "Unknown Project"
-                            }</span>
-                            <span>Due: ${deadlineDate.toLocaleDateString()} ${
-        isOverdue ? "(Overdue!)" : ""
-      }</span>
-                        </div>
-                    </div>
-                `;
-    })
-    .join("");
+      tasksHTML.push(`
+        <div class="task-item ${isOverdue ? "overdue" : ""}">
+          <div class="task-header">
+            <div class="task-title">${task.title}</div>
+            <div class="task-status status-${task.status}" onclick="cycleTaskStatus('${task.id}', '${task.status}')">
+              ${task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+            </div>
+          </div>
+          <div class="task-details">
+            <span>Project: ${task.projectTitle}</span>
+            <span>Due: ${deadlineDate.toLocaleDateString()} ${isOverdue ? "(Overdue!)" : ""}</span>
+          </div>
+        </div>
+      `);
+    });
+
+    tasksList.innerHTML = tasksHTML.join('');
+  });
 }
 
 function loadNotifications() {
-  const userNotifications = notifications.filter(
-    (n) => n.userId === currentUser.id
-  );
-  const notificationsList = document.getElementById("notificationsList");
+  const notificationsRef = ref(database, 'notifications');
+  const userNotificationsQuery = query(notificationsRef, orderByChild('userId'), equalTo(currentUser.uid));
 
-  if (userNotifications.length === 0) {
-    notificationsList.innerHTML =
-      '<p style="text-align: center; color: #666;">No notifications yet.</p>';
-    return;
-  }
+  // Clean up previous listener
+  if (notificationsListener) notificationsListener();
 
-  notificationsList.innerHTML = userNotifications
-    .map((notification) => {
+  notificationsListener = onValue(userNotificationsQuery, (snapshot) => {
+    const notificationsList = document.getElementById("notificationsList");
+
+    if (!snapshot.exists()) {
+      notificationsList.innerHTML = '<p style="text-align: center; color: #666;">No notifications yet.</p>';
+      return;
+    }
+
+    const notifications = [];
+    snapshot.forEach((childSnapshot) => {
+      notifications.push({
+        id: childSnapshot.key,
+        ...childSnapshot.val()
+      });
+    });
+
+    // Sort by date (newest first)
+    notifications.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    const notificationsHTML = notifications.map((notification) => {
       const notificationDate = new Date(notification.createdAt);
       return `
-                    <div class="task-item ${
-                      notification.read ? "" : "unread"
-                    }" onclick="markNotificationRead(${notification.id})">
-                        <div class="task-header">
-                            <div class="task-title">${
-                              notification.message
-                            }</div>
-                            <div style="font-size: 12px; color: #666;">
-                                ${notificationDate.toLocaleDateString()} ${notificationDate.toLocaleTimeString()}
-                            </div>
-                        </div>
-                    </div>
-                `;
-    })
-    .reverse()
-    .join("");
+        <div class="task-item ${notification.read ? "" : "unread"}" onclick="markNotificationRead('${notification.id}', ${notification.read})">
+          <div class="task-header">
+            <div class="task-title">${notification.message}</div>
+            <div style="font-size: 12px; color: #666;">
+              ${notificationDate.toLocaleDateString()} ${notificationDate.toLocaleTimeString()}
+            </div>
+          </div>
+        </div>
+      `;
+    });
+
+    notificationsList.innerHTML = notificationsHTML.join('');
+  });
 }
 
-function markNotificationRead(notificationId) {
-  const notification = notifications.find((n) => n.id === notificationId);
-  if (notification) {
-    notification.read = true;
-    localStorage.setItem("kollabNotifications", JSON.stringify(notifications));
-    loadNotifications();
+async function markNotificationRead(notificationId, isRead) {
+  if (!isRead) {
+    try {
+      const notificationRef = ref(database, `notifications/${notificationId}`);
+      await update(notificationRef, {
+        read: true
+      });
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+    }
   }
 }
 
 function showNotification(message, type = "info") {
   const notification = document.getElementById("notification");
   notification.textContent = message;
-  notification.className = notification ${type};
+  notification.className = `notification ${type}`;
   notification.classList.add("show");
 
   setTimeout(() => {
@@ -420,60 +515,71 @@ function showNotification(message, type = "info") {
   }, 3000);
 }
 
-function checkDeadlines() {
+async function checkDeadlines() {
   if (!currentUser) return;
 
   const today = new Date();
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
 
-  const myTasks = tasks.filter(
-    (t) => t.assigneeId === currentUser.id && t.status !== "completed"
-  );
+  const tasksRef = ref(database, 'tasks');
+  const myTasksQuery = query(tasksRef, orderByChild('assigneeId'), equalTo(currentUser.uid));
+  
+  const snapshot = await get(myTasksQuery);
 
-  myTasks.forEach((task) => {
-    const deadline = new Date(task.deadline);
-    const project = projects.find((p) => p.id === task.projectId);
+  if (snapshot.exists()) {
+    snapshot.forEach(async (childSnapshot) => {
+      const task = childSnapshot.val();
+      
+      if (task.status === 'completed') return;
 
-    if (deadline.toDateString() === tomorrow.toDateString()) {
-      const notification = {
-        id: Date.now() + Math.random(),
-        userId: currentUser.id,
-        message: `Task "${task.title}" in project "${
-          project ? project.title : "Unknown"
-        }" is due tomorrow!`,
-        type: "deadline_reminder",
-        read: false,
-        createdAt: new Date().toISOString(),
-      };
-      notifications.push(notification);
-      localStorage.setItem(
-        "kollabNotifications",
-        JSON.stringify(notifications)
-      );
-    }
+      const deadline = new Date(task.deadline);
 
-    if (deadline < today) {
-      const notification = {
-        id: Date.now() + Math.random(),
-        userId: currentUser.id,
-        message: `Task "${task.title}" in project "${
-          project ? project.title : "Unknown"
-        }" is overdue!`,
-        type: "overdue",
-        read: false,
-        createdAt: new Date().toISOString(),
-      };
-      notifications.push(notification);
-      localStorage.setItem(
-        "kollabNotifications",
-        JSON.stringify(notifications)
-      );
-    }
-  });
+      // Tomorrow reminder
+      if (deadline.toDateString() === tomorrow.toDateString()) {
+        const notificationsRef = ref(database, 'notifications');
+        const newNotificationRef = push(notificationsRef);
+
+        await set(newNotificationRef, {
+          userId: currentUser.uid,
+          message: `Task "${task.title}" in project "${task.projectTitle}" is due tomorrow!`,
+          type: "deadline_reminder",
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      // Overdue
+      if (deadline < today) {
+        const notificationsRef = ref(database, 'notifications');
+        const newNotificationRef = push(notificationsRef);
+
+        await set(newNotificationRef, {
+          userId: currentUser.uid,
+          message: `Task "${task.title}" in project "${task.projectTitle}" is overdue!`,
+          type: "overdue",
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+      }
+    });
+  }
 
   // Check again in 1 hour
   setTimeout(checkDeadlines, 3600000);
+}
+
+function getErrorMessage(errorCode) {
+  const errorMessages = {
+    'auth/email-already-in-use': 'Email already exists!',
+    'auth/invalid-email': 'Invalid email address!',
+    'auth/weak-password': 'Password should be at least 6 characters!',
+    'auth/user-not-found': 'User not found!',
+    'auth/wrong-password': 'Invalid credentials!',
+    'auth/invalid-credential': 'Invalid credentials!'
+  };
+  
+  return errorMessages[errorCode] || 'An error occurred. Please try again.';
 }
 
 // Close modals when clicking outside
@@ -486,31 +592,13 @@ window.onclick = function (event) {
   });
 };
 
-// Add some demo data for testing
-if (users.length === 0) {
-  const demoUsers = [
-    {
-      id: 1,
-      name: "John Doe",
-      email: "john@example.com",
-      password: "password",
-    },
-    {
-      id: 2,
-      name: "Jane Smith",
-      email: "jane@example.com",
-      password: "password",
-    },
-    {
-      id: 3,
-      name: "Bob Johnson",
-      email: "bob@example.com",
-      password: "password",
-    },
-  ];
-  users.push(...demoUsers);
-  localStorage.setItem("kollabUsers", JSON.stringify(users));
-}
-
-// const x = setTimeout(()=>{console.log(Working Fine)}, 1000);
-// console.log (x);
+// Make functions globally available
+window.switchAuthTab = switchAuthTab;
+window.logout = logout;
+window.switchSection = switchSection;
+window.openCreateProjectModal = openCreateProjectModal;
+window.openCreateTaskModal = openCreateTaskModal;
+window.closeModal = closeModal;
+window.openProjectModal = openProjectModal;
+window.cycleTaskStatus = cycleTaskStatus;
+window.markNotificationRead = markNotificationRead;
