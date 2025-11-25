@@ -1,0 +1,28 @@
+{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "$uid === auth.uid"
+      }
+    },
+    "projects": {
+      ".read": "auth != null",
+      "$projectId": {
+        ".write": "auth != null"
+      }
+    },
+    "tasks": {
+      ".read": "auth != null",
+      "$taskId": {
+        ".write": "auth != null"
+      }
+    },
+    "notifications": {
+      "$notificationId": {
+        ".read": "data.child('userId').val() === auth.uid || auth != null",
+        ".write": "auth != null"
+      }
+    }
+  }
+}
