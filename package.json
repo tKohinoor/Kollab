@@ -1,0 +1,33 @@
+{
+  "name": "kollab",
+  "version": "1.0.0",
+  "description": "Real-time team collaboration platform built with Firebase",
+  "main": "index.html",
+  "scripts": {
+    "start": "http-server -p 8000 -o",
+    "deploy": "firebase deploy --only hosting",
+    "serve": "firebase serve"
+  },
+  "keywords": [
+    "collaboration",
+    "project-management",
+    "firebase",
+    "real-time",
+    "task-management",
+    "team-collaboration"
+  ],
+  "author": "Your Name <your.email@example.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/kollab.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/kollab/issues"
+  },
+  "homepage": "https://github.com/yourusername/kollab#readme",
+  "devDependencies": {
+    "firebase-tools": "^13.0.0",
+    "http-server": "^14.1.1"
+  }
+}
