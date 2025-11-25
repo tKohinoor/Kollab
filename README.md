@@ -59,7 +59,7 @@ Kollab is a real-time team collaboration platform that enables teams to manage p
 
 ## 🚀 Live Demo
 
-🌐 **[View Live Application](https://kollabjovac.web.app)**
+🌐 **[View Live Application](https://kollabjovac.netlify.app/)**
 
 ## 📸 Screenshots
 
@@ -294,9 +294,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## 👨‍💻 Author
 
 **Your Name**
-- GitHub: [@yourusername](https://github.com/yourusername)
-- LinkedIn: [Your LinkedIn](https://linkedin.com/in/yourprofile)
-- Email: your.email@example.com
+- GitHub: [@yourusername](https://github.com/tKohinoor)
+- LinkedIn: [Your LinkedIn](https://linkedin.com/in/kohinoortiwari)
+- Email: kohinoortiwari2006@gmail.com
 
 ## 🙏 Acknowledgments
 
